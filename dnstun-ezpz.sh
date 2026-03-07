@@ -17,8 +17,8 @@ WARP_ACCOUNT_TOML="$BASE_DIR/wgcf-account.toml"
 ROUTE_SETUP_SH="$BASE_DIR/route_setup.sh"
 
 DNSTT_FIRST_PORT=48271
-DNSTT_SERVER_IMAGE="aleskxyz/dnstt-server:v1.1"
-DNS_LB_IMAGE="aleskxyz/dns_tunnel_lb:v0.1"
+DNSTT_SERVER_IMAGE="ghcr.io/aleskxyz/dnstt-server:1.0.0"
+DNS_LB_IMAGE="ghcr.io/aleskxyz/dns-tun-lb:0.2.1"
 SINGBOX_SOCKS_PORT=48260
 SINGBOX_IMAGE="gzxhwq/sing-box:1.12.14"
 ROUTE_SETUP_IMAGE="icasture/network-helper:latest"
@@ -502,6 +502,7 @@ run_menu_or_reconfigure() {
 
   # RECONFIGURE CLUSTER (prompts)
   echo "==== CREATE CLUSTER ===="
+  OLD_SSH_USER="${SSH_USER:-}"
   prompt_if_empty PREFIX "Enter prefix for server domain names" "${PREFIX:-s}"
   while true; do
     prompt_if_empty NUM_SERVERS "Enter number of servers" "${NUM_SERVERS:-3}"
@@ -831,11 +832,17 @@ ROUTEEOF
 # ===========================
 # Create SSH user for tunnel (sets SSH_UID)
 # ===========================
+# When reconfiguring: updates password if user exists; removes old user if username changed.
 create_ssh_user() {
   if ! id -u "$SSH_USER" &>/dev/null; then
     useradd -d /var/empty -s /usr/sbin/nologin -M -p "$(openssl passwd -6 "$SSH_PASS")" "$SSH_USER"
+  else
+    usermod -p "$(openssl passwd -6 "$SSH_PASS")" "$SSH_USER"
   fi
   SSH_UID=$(id -u "$SSH_USER" 2>/dev/null)
+  if [[ -n "${OLD_SSH_USER:-}" && "${OLD_SSH_USER}" != "$SSH_USER" ]] && id -u "$OLD_SSH_USER" &>/dev/null; then
+    userdel "$OLD_SSH_USER" || echo "Warning: failed to delete old SSH user $OLD_SSH_USER" >&2
+  fi
 }
 
 # ===========================
