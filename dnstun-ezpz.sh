@@ -5,7 +5,7 @@ set -e
 # Variables
 # ===========================
 BASE_DIR="/opt/dnstun-ezpz"
-DNSTUN_VERSION="v0.3.2"
+DNSTUN_VERSION="v0.4.0"
 CONFIG_FILE="$BASE_DIR/dnstun.conf"
 DNS_LB_YML="$BASE_DIR/dns-lb.yml"
 DOCKER_COMPOSE_YML="$BASE_DIR/docker-compose.yml"
@@ -18,6 +18,7 @@ ROUTE_SETUP_SH="$BASE_DIR/route_setup.sh"
 
 TRANSPORT_FIRST_PORT=48271
 DNSTT_SERVER_IMAGE="ghcr.io/aleskxyz/dnstt-server:1.1.0"
+NOIZDNS_SERVER_IMAGE="ghcr.io/aleskxyz/noizdns-server:1.0.0"
 SLIPSTREAM_SERVER_IMAGE="aleskxyz/slipstream-server:1.1.3"
 DNS_LB_IMAGE="ghcr.io/aleskxyz/dns-tun-lb:0.3.0"
 SINGBOX_SOCKS_PORT=48260
@@ -262,9 +263,9 @@ load_join_config() {
     exit 1
   fi
   local need_key=0
-  for t in "${TRANSPORTS[@]}"; do [[ "$t" == "dnstt" ]] && need_key=1; done
+  for t in "${TRANSPORTS[@]}"; do [[ "$t" == "dnstt" || "$t" == "noizdns" ]] && need_key=1; done
   if [[ $need_key -eq 1 && -z "$PRIVKEY" ]]; then
-    echo "Error: Invalid join config: pk (privkey) required when any domain uses dnstt transport." >&2
+    echo "Error: Invalid join config: pk (privkey) required when any domain uses dnstt or noizdns transport." >&2
     exit 1
   fi
   derive_pubkey
@@ -282,12 +283,15 @@ generate_slipnet_uri() {
   local transport="$1" protocol="$2" domain="$3" pubkey="$4"
   local auth_user="$5" auth_pass="$6" profile_name="$7"
 
+  # SlipNet v17: NoizDNS uses tunnel type strings sayedns / sayedns_ssh (see SlipNet ConfigExporter/ConfigImporter MODE_NOIZDNS).
   local tunnel_type
   case "${transport}_${protocol}" in
-    dnstt_ssh)        tunnel_type="dnstt_ssh" ;;
-    dnstt_socks)      tunnel_type="dnstt" ;;
-    slipstream_ssh)   tunnel_type="slipstream_ssh" ;;
-    slipstream_socks) tunnel_type="ss" ;;
+    dnstt_ssh)         tunnel_type="dnstt_ssh" ;;
+    dnstt_socks)       tunnel_type="dnstt" ;;
+    noizdns_ssh)       tunnel_type="sayedns_ssh" ;;
+    noizdns_socks)     tunnel_type="sayedns" ;;
+    slipstream_ssh)    tunnel_type="slipstream_ssh" ;;
+    slipstream_socks)  tunnel_type="ss" ;;
   esac
 
   local ssh_enabled="0" ssh_user="" ssh_pass=""
@@ -324,7 +328,7 @@ print_current_config() {
     echo "protocol: $protocol"
     echo "username: $AUTH_USER"
     echo "password: $AUTH_PASS"
-    if [[ "$transport" == "dnstt" ]]; then
+    if [[ "$transport" == "dnstt" || "$transport" == "noizdns" ]]; then
       echo "public_key: $PUBKEY"
     fi
     local slipnet_uri
@@ -679,14 +683,14 @@ run_menu_or_reconfigure() {
 
     DEFAULT_TRANSPORT="${TRANSPORTS[$i]}"
     while true; do
-      read -rp "Enter transport for $DOMAIN_NAME (dnstt/slipstream)${DEFAULT_TRANSPORT:+ [$DEFAULT_TRANSPORT]}: " TR
+      read -rp "Enter transport for $DOMAIN_NAME (dnstt/slipstream/noizdns)${DEFAULT_TRANSPORT:+ [$DEFAULT_TRANSPORT]}: " TR
       candidate="${TR:-$DEFAULT_TRANSPORT}"
       candidate=${candidate,,}
-      if [[ "$candidate" == "dnstt" || "$candidate" == "slipstream" ]]; then
+      if [[ "$candidate" == "dnstt" || "$candidate" == "slipstream" || "$candidate" == "noizdns" ]]; then
         NEW_TRANSPORTS+=("$candidate")
         break
       else
-        echo "Invalid transport. Must be 'dnstt' or 'slipstream'." >&2
+        echo "Invalid transport. Must be 'dnstt', 'slipstream', or 'noizdns'." >&2
       fi
     done
 
@@ -709,7 +713,7 @@ run_menu_or_reconfigure() {
   TRANSPORTS=("${NEW_TRANSPORTS[@]}")
 
   local need_dnstt_key=0
-  for t in "${TRANSPORTS[@]}"; do [[ "$t" == "dnstt" ]] && need_dnstt_key=1; done
+  for t in "${TRANSPORTS[@]}"; do [[ "$t" == "dnstt" || "$t" == "noizdns" ]] && need_dnstt_key=1; done
   if [[ $need_dnstt_key -eq 1 ]]; then
     while true; do
       PRIVKEY_SAVED="$PRIVKEY"
@@ -729,8 +733,11 @@ run_menu_or_reconfigure() {
       echo "Invalid private key. Key must be 64 hex characters and must derive a valid public key." >&2
     done
     if [[ -z "$PRIVKEY" ]]; then
-      echo "Generating transport key (DNSTT)..."
-      KEYS=$(docker run --rm $DNSTT_SERVER_IMAGE -gen-key)
+      echo "Generating transport key (DNSTT/NoizDNS)..."
+      local keygen_image="$DNSTT_SERVER_IMAGE" has_dnstt_domain=0
+      for t in "${TRANSPORTS[@]}"; do [[ "$t" == "dnstt" ]] && has_dnstt_domain=1; done
+      [[ $has_dnstt_domain -eq 0 ]] && keygen_image="$NOIZDNS_SERVER_IMAGE"
+      KEYS=$(docker run --rm "$keygen_image" -gen-key)
       PRIVKEY=$(echo "$KEYS" | grep 'privkey' | awk '{print $2}')
       derive_pubkey
     fi
@@ -815,6 +822,27 @@ EOF
       done
     done
   fi
+  # NoizDNS pools (dns-tun-lb protocol noizdns; same backend layout as dnstt)
+  local has_noizdns=0
+  for i in "${!DOMAINS[@]}"; do [[ "${TRANSPORTS[$i]}" == "noizdns" ]] && { has_noizdns=1; break; }; done
+  if [[ $has_noizdns -eq 1 ]]; then
+    echo "  noizdns:" >> "$DNS_LB_YML"
+    echo "    pools:" >> "$DNS_LB_YML"
+    for i in "${!DOMAINS[@]}"; do
+      [[ "${TRANSPORTS[$i]}" != "noizdns" ]] && continue
+      DOMAIN=${DOMAINS[$i]}
+      CURRENT_PORT=$((TRANSPORT_FIRST_PORT + i))
+      cat <<EOF >> "$DNS_LB_YML"
+      - name: "$DOMAIN"
+        domain_suffix: "$DOMAIN"
+        backends:
+EOF
+      for ((server_id=1;server_id<=NUM_SERVERS;server_id++)); do
+        echo "          - id: \"${PREFIX}${server_id}\"" >> "$DNS_LB_YML"
+        echo "            address: \"${PREFIX}${server_id}.$BASE_DOMAIN:$CURRENT_PORT\"" >> "$DNS_LB_YML"
+      done
+    done
+  fi
   # Slipstream pools: lb_id must match server id (subdomain number), e.g. lb_id 2 -> s2
   local has_slipstream=0
   for i in "${!DOMAINS[@]}"; do [[ "${TRANSPORTS[$i]}" == "slipstream" ]] && { has_slipstream=1; break; }; done
@@ -861,9 +889,10 @@ services:
       - NET_BIND_SERVICE
 EOF
 
-  # Add transport services (DNSTT or Slipstream per domain); port = TRANSPORT_FIRST_PORT + domain index; container index per transport
+  # Add transport services (DNSTT, NoizDNS, or Slipstream per domain); port = TRANSPORT_FIRST_PORT + domain index; container index per transport
   SLIPSTREAM_VOLUMES=()
   DNSTT_IDX=0
+  NOIZDNS_IDX=0
   SLIPSTREAM_IDX=0
   for i in "${!DOMAINS[@]}"; do
     DOMAIN=${DOMAINS[$i]}
@@ -885,6 +914,26 @@ EOF
       -privkey "$PRIVKEY"
       -udp :$LOCAL_PORT
       $BACKEND
+    restart: always
+    network_mode: "host"
+EOF
+    elif [[ "$TRANSPORT" == "noizdns" ]]; then
+      ((NOIZDNS_IDX++)) || true
+      CONTAINER_NAME="noizdns-$NOIZDNS_IDX"
+      # Tor PT-style: listen bind + upstream from TOR_PT_*; process args -privkey -mtu NS_SUBDOMAIN only.
+      cat <<EOF >> "$DOCKER_COMPOSE_YML"
+
+  $CONTAINER_NAME:
+    image: $NOIZDNS_SERVER_IMAGE
+    environment:
+      TOR_PT_MANAGED_TRANSPORT_VER: "1"
+      TOR_PT_SERVER_TRANSPORTS: dnstt
+      TOR_PT_SERVER_BINDADDR: "dnstt-0.0.0.0:$LOCAL_PORT"
+      TOR_PT_ORPORT: "$TARGET_ADDR"
+    command: >
+      -privkey "$PRIVKEY"
+      -mtu 512
+      $DOMAIN
     restart: always
     network_mode: "host"
 EOF

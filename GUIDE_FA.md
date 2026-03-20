@@ -19,7 +19,7 @@
 
 چی میخوایم:
 
-روی هر دامنه دو تا سرویبس میخوایم.
+روی هر دامنه دو تا سرویس میخوایم.
 روی دامنه demo1.com میخوایم dnstt رو با ssh و slipstream  رو با socks ایجاد کنیم و روی دامنه دوم میخوایم dnstt رو با socks و slipstream رو با ssh ایجاد کنیم.
 
 
@@ -28,7 +28,7 @@
 اسکریپت حتماً باید با root اجرا شود. وارد سرور اول میشیم و دستور زیر رو اجرا میکنیم:
 ```
 sudo -i
-bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh")
+bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh")
 ```
 چندتا سوال از ما پرسیده میشه که به این صورت جواب میدیم:
 ```
@@ -39,16 +39,16 @@ Enter username (for SSH and SOCKS) [vpnuser]: vpnuser
 Enter password (for SSH and SOCKS): P@ssword
 Enter number of domains [1]: 4
 Enter domain name #1: ns1.demo1.com
-Enter transport for ns1.demo1.com (dnstt/slipstream): dnstt
+Enter transport for ns1.demo1.com (dnstt/slipstream/noizdns): dnstt
 Enter protocol for ns1.demo1.com (ssh/socks): ssh
 Enter domain name #2: ns2.demo1.com
-Enter transport for ns2.demo1.com (dnstt/slipstream): slipstream
+Enter transport for ns2.demo1.com (dnstt/slipstream/noizdns): slipstream
 Enter protocol for ns2.demo1.com (ssh/socks): socks
 Enter domain name #3: ns1.demo2.com
-Enter transport for ns1.demo2.com (dnstt/slipstream): dnstt
+Enter transport for ns1.demo2.com (dnstt/slipstream/noizdns): dnstt
 Enter protocol for ns1.demo2.com (ssh/socks): socks
 Enter domain name #4: ns2.demo2.com
-Enter transport for ns2.demo2.com (dnstt/slipstream): slipstream
+Enter transport for ns2.demo2.com (dnstt/slipstream/noizdns): slipstream
 Enter protocol for ns2.demo2.com (ssh/socks): ssh
 Enter DNSTT private key (hex, 64 chars). Leave empty to keep current or generate new key:
 ```
@@ -63,24 +63,24 @@ Enter DNSTT private key (hex, 64 chars). Leave empty to keep current or generate
 
 سوال پنجم: رمز عبور برای همون کاربر (برای SSH و SOCKS).
 
-سوال ششم: تعداد دامنه‌های جلویی (front domain). اینجا ۴ تا داریم: ns1.demo1.com، ns2.demo1.com، ns1.demo2.com، ns2.demo2.com — یعنی روی هر دامنهٔ اصلی (demo1 و demo2) دو تا سرویس (یکی dnstt و یکی slipstream).
+سوال ششم: تعداد دامنه‌های جلویی (front domain). اینجا ۴ تا داریم: ns1.demo1.com، ns2.demo1.com، ns1.demo2.com، ns2.demo2.com — یعنی روی هر دامنهٔ اصلی (demo1 و demo2) دو تا سرویس (مثلاً یکی dnstt و یکی slipstream).
 
 برای هر دامنه سه سوال پرسیده میشه:
 - **نام دامنه** (مثلاً ns1.demo1.com)
-- **ترنسپورت (transport)**: dnstt یا slipstream — یعنی نوع تونل DNS.
+- **ترنسپورت (transport)**: **dnstt**، **noizdns** یا **slipstream**.
 - **پروتکل (protocol)**: ssh یا socks — یعنی بعد از تونل، کلاینت به SSH وصل بشه یا به پروکسی SOCKS.
 
-این سه تا رو برای هر چهار دامنه وارد می‌کنیم. در آخر اگر حداقل یک دامنه dnstt داشته باشیم، کلید خصوصی DNSTT رو می‌پرسه:
+این سه تا رو برای هر چهار دامنه وارد می‌کنیم. در صورت نیاز، در انتها **کلید خصوصی** هم پرسیده می‌شود:
 
 - **خالی Enter بزنید** تا اسکریپت خودش یک کلید جدید بسازه، یا اگر دارید reconfigure می‌کنید همان کلید فعلی بمونه.
-- **کلید قبلی رو paste کنید** اگر می‌خواهید از یک کانفیگ dnstt قدیمی مهاجرت کنید تا کلاینت‌ها بدون تعویض کلید عمومی کار کنند.
+- **کلید قبلی رو paste کنید** اگر می‌خواهید از یک کانفیگ قدیمی مهاجرت کنید تا کلاینت‌ها بدون تعویض کلید عمومی کار کنند.
 - برای **ساختن دستی یک کلید جدید** (مثلاً برای عوض کردن کلید فعلی) می‌توانید این دستور را بزنید و مقدار `privkey` را وقتی اسکریپت پرسید وارد کنید:
 ```
 docker run --rm ghcr.io/aleskxyz/dnstt-server:1.1.0 -gen-key
 ```
 در نهایت اسکریپت کار کانفیگ رو شروع میکنه. اول توی warp برای این سرور یه اکانت ایجاد میکنه و بعد فایلهای مورد نیاز رو میسازه و سرویس رو بالا میاره. قسمت پایین خروجی این رو نشونمون میده:
 ```
-Generating transport key (DNSTT)...
+Generating transport key (DNSTT/NoizDNS)...
 Detected SSH port: 22
 Registering WARP device (accepting ToS) via wgcf...
 2026/03/06 10:43:50 Using config file: /data/wgcf-account.toml
@@ -118,7 +118,7 @@ WARN[0000] Warning: No resource found to remove for project "dnstun-ezpz".
 ✔ Container dnstun-ezpz-route-setup-1  Created
 ```
 
-پایین‌تر کانفیگ کلاینت برای هر instance چاپ میشه (دامنه، ترنسپورت، پروتکل، کاربر/رمز؛ برای dnstt کلید عمومی هم هست). همچنین برای هر instance یک **SlipNet URI** و **کد QR** نمایش داده میشه که میتونید مستقیماً توی اپ [SlipNet](https://github.com/AnonVector/SlipNet) اسکن یا paste کنید:
+پایین‌تر کانفیگ کلاینت برای هر instance چاپ میشه (دامنه، ترنسپورت، پروتکل، کاربر/رمز؛ در صورت نیاز کلید عمومی هم هست). همچنین برای هر instance یک **SlipNet URI** و **کد QR** نمایش داده میشه که میتونید مستقیماً توی اپ [SlipNet](https://github.com/AnonVector/SlipNet) اسکن یا paste کنید:
 ```
 ==== CLIENT CONFIG ====
 
@@ -236,7 +236,7 @@ s3.demo1.com   A   60.70.80.92
 
     Run on other servers to join:
 
-    bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh") "<BASE64_JOIN_CONFIG>"
+    bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh") "<BASE64_JOIN_CONFIG>"
 
 
 خروجی اسکریپت در آخر یک خط «Join command» با یک رشتهٔ base64 نشون میده. اون خط رو کامل کپی کنید. روی سرور دوم و سوم با root همان دستور رو اجرا کنید؛ اسکریپت از شما فقط «این سرور ID چنده؟» (۲ و ۳) رو می‌پرسه و بقیهٔ کانفیگ رو از همون رشته می‌گیره. بعد از join، کلاستر تکمیل میشه.
@@ -247,7 +247,7 @@ s3.demo1.com   A   60.70.80.92
 
 اگر بعد از ایجاد کانفیگ دوباره اسکریپت رو بدون آرگومان اجرا کنید، یک منو نشون داده میشه:
 
-    bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh")
+    bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh")
     Select action:
     1) Print current config
     2) Reconfigure cluster
@@ -260,7 +260,7 @@ s3.demo1.com   A   60.70.80.92
 با وارد کردن عدد هر گزینه آن عملیات اجرا میشه:
 
 1. **نمایش کانفیگ فعلی** — همان خروجی دامنه/ترنسپورت/پروتکل، SlipNet URI و کد QR برای هر instance، رکوردهای DNS و دستور join.
-2. **تنظیم مجدد کلاستر** — تغییر ID سرور، پیشوند، تعداد سرور، کاربر/رمز، دامنه‌ها، ترنسپورت و پروتکل. بعد از تغییر حتماً دستور join جدید رو در بقیه سرورها هم اجرا کنید.
+2. **تنظیم مجدد کلاستر** — تغییر ID سرور، پیشوند، تعداد سرور، کاربر/رمز، دامنه‌ها، ترنسپورت و پروتکل؛ در صورت نیاز دوباره کلید هم پرسیده می‌شود. بعد از تغییر حتماً دستور join جدید رو در بقیه سرورها هم اجرا کنید.
 3. **استارت سرویس‌ها**
 4. **توقف سرویس‌ها**
 5. **ریستارت سرویس‌ها**

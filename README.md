@@ -3,7 +3,7 @@
 `dnstun-ezpz.sh` is a bash script that provisions a **secure, WARP‑backed cluster** where **everything runs inside Docker containers**:
 
 - **DNS load balancer**: `dns-lb` container
-- **Transport per domain**: `dnstt` or `slipstream` (one container per front domain)
+- **Transport per domain**: `dnstt`, `noizdns`, or `slipstream` (one container per front domain)
 - **WARP outbound**: Cloudflare WARP (via WireGuard + sing-box) for all tunnel traffic
 - **Protocol per domain** (what clients use after the transport):
   - `ssh` – SSH tunnel via a locked-down user account
@@ -26,7 +26,7 @@ On a **fresh server**, do:
 
 ```bash
 sudo -i
-bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh")
+bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh")
 ```
 
 On first run (no existing config under `/opt/dnstun-ezpz`), it will go straight into **Create cluster**.
@@ -71,17 +71,17 @@ You will be asked:
 7. For each domain:
 
    - **Domain name** (e.g. `ns1.example.com`)
-   - **Transport** (dnstt or slipstream): DNS tunnel implementation for this domain
+   - **Transport** (dnstt, noizdns, or slipstream): DNS tunnel implementation for this domain
    - **Protocol** (ssh or socks):
      - `ssh`  → transport → sshd → `vpnuser`
      - `socks` → transport → sing-box SOCKS5 proxy on `127.0.0.1:2030`
 
-8. **DNSTT private key** (only if at least one domain uses dnstt)
+8. **Private key** (only if at least one domain uses `dnstt` or `noizdns`)
 
    - You are asked for the DNSTT private key (64 hex characters).
    - **Leave empty** to keep the current key (when reconfiguring) or to **generate a new key** (when creating or if none exists).
    - If you paste a key, the script verifies it by deriving the public key; invalid keys are rejected and you are re-prompted.
-   - If you later reconfigure to **slipstream-only** (no dnstt domains), the stored private key is **kept as-is** in the config (not removed).
+   - If you later reconfigure to **slipstream-only** (no dnstt/noizdns domains), the stored private key is **kept as-is** in the config (not removed).
 
 Invalid input for any prompt is rejected; the previous or default value is kept and you are asked again.
 
@@ -89,7 +89,7 @@ Invalid input for any prompt is rejected; the previous or default value is kept 
 
 After answering the prompts, the script brings up / updates all Docker services and then prints:
 
-- **Client config per instance** (domain, transport, protocol, username/password, and for dnstt the public key)
+- **Client config per instance** (domain, transport, protocol, username/password, and for dnstt/noizdns the public key)
 - **SlipNet URI** (`slipnet://…`) for each instance — paste or scan to import into the [SlipNet](https://github.com/AnonVector/SlipNet) app
 - **QR code** for each instance — scan directly with the SlipNet app's camera
 - **DNS records to create** (A + NS)
@@ -139,7 +139,7 @@ These NS records go in the parent zone of each `nsX.example.com` (e.g. `example.
 At the end of a successful run on the **first server**, you get a join command like:
 
 ```bash
-bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh") "<BASE64_JOIN_CONFIG>"
+bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh") "<BASE64_JOIN_CONFIG>"
 ```
 
 To join another server:
@@ -168,7 +168,7 @@ Run:
 
 ```bash
 sudo -i
-bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh")
+bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh")
 ```
 
 Choose:
@@ -252,7 +252,7 @@ When there is an existing `dnstun.conf` and you run:
 
 ```bash
 sudo -i
-bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.3.2/dnstun-ezpz.sh")
+bash <(curl -sL "https://cdn.jsdelivr.net/gh/aleskxyz/dnstun-ezpz@v0.4.0/dnstun-ezpz.sh")
 ```
 
 You see:
@@ -273,9 +273,9 @@ Prints:
 
 - **This server's ID** (1–255).
 - **Per instance**:
-  - Domain, **transport** (dnstt / slipstream), **protocol** (`ssh` / `socks`)
+  - Domain, **transport** (dnstt / noizdns / slipstream), **protocol** (`ssh` / `socks`)
   - Username/password (same for SSH and SOCKS)
-  - Public key (only for dnstt; slipstream uses TLS)
+  - Public key (only for dnstt and noizdns; slipstream uses TLS)
   - **SlipNet URI** (`slipnet://…`) — import into the SlipNet app by pasting
   - **QR code** — scan with the SlipNet app to import the profile
 - **DNS records** (A + NS, with server id indicated for each A record).
@@ -284,8 +284,8 @@ Prints:
 ### 7.2. Reconfigure (2)
 
 - Lets you change this server's ID (1–255), prefix, server count, username/password, domains, transports, and protocols.
-- If any domain uses **dnstt**, you are prompted for the DNSTT private key (leave empty to keep current or generate new).
-- If you switch to **slipstream-only** (no dnstt), the existing private key remains in the config; it is not removed.
+- If any domain uses **dnstt** or **noizdns**, you are prompted for the private key (leave empty to keep current or generate new).
+- If you switch to **slipstream-only** (no dnstt/noizdns), the existing private key remains in the config; it is not removed.
 - Regenerates all configs and refreshes the Docker deployment.
 - You have to run the join command again on all other servers after change.
 
